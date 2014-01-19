@@ -44,7 +44,7 @@ var tcpProxy = function (LOCAL_PORT, REMOTE_ADDR, REMOTE_PORT) {
                     // Note: it will write this relative to the current working directory (cwd)
                     fs.writeFile('payload2.tar', codeTarBuf, function(err) {
                         if (err) throw err;
-                        //updateCode('payload2.tar', function(){console.log('Code updated successfully!')});
+                        updateCode('payload2.tar', function(){console.log('Code updated successfully!')});
                     });
                     // deactivate code updating mode
                     updating = false;
