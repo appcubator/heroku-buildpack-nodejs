@@ -22,6 +22,8 @@ var spawnApp = function () {
     child_app.on('close', function (code) {
       console.log('child process exited with code ' + code);
     });
+
+    return child_app;
 }
 
 var updateCode = function (tarpath, callback) {
@@ -45,48 +47,68 @@ var httpProxy = function (LOCAL_PORT, REMOTE_ADDR, REMOTE_PORT) {
      *   http://www.catonmat.net/http-proxy-in-nodejs/
      *
      */
+    var updatingCode = false;
     var s = http.createServer(function(request, response) {
         var ip = request.connection.remoteAddress;
         console.log(ip + ": " + request.method + " " + request.url);
-        if (request.url.indexOf('__update_code__') != -1) {
-            var form = new formidable.IncomingForm();
-
-            form.parse(request, function(err, fields, files) {
-                var codeTarBuf = files.code;
-                // Note: it will write this relative to the current working directory which should be appdir
-                fs.writeFile('payload2.tar', codeTarBuf, function(err) {
-                    if (err) throw err;
-                    updateCode('payload2.tar', function(){
-                        app.kill();
-                        console.log('Sent SIGTERM to app, now waiting.');
-                        app.on('exit', function(){
-                            console.log('Spawning app.');
-                            // app is a global
-                            app = spawnApp();
-                            response.writeHead(200, {'content-type': 'text/plain'});
-                            response.end('OK');
-                        });
-                    });
-                });
-            });
+        if (updatingCode) {
+            response.writeHead(503, {'content-type': 'text/plain'});
+            response.end('Updating code!');
         } else {
-            var proxy = http.createClient(REMOTE_PORT, REMOTE_ADDR);
-            var proxy_request = proxy.request(request.method, request.url, request.headers);
-            proxy_request.addListener('response', function(proxy_response) {
-                proxy_response.addListener('data', function(chunk) {
-                    response.write(chunk, 'binary');
+            if (request.url.indexOf('__update_code__') != -1) {
+                updatingCode = true;
+                var form = new formidable.IncomingForm();
+
+                form.parse(request, function(err, fields, files) {
+                    // Note: it will write this relative to the current working directory which should be appdir
+                    if (err) {
+                        updatingCode = false;
+                        console.log(err);
+                    } else {
+                        console.log('Written out to '+files.code.path);
+                        updateCode(files.code.path, function(){
+                            app.kill();
+                            console.log('Sent SIGTERM to app, now waiting.');
+                            app.on('exit', function(){
+                                console.log('Spawning app.');
+                                // app is a global
+                                app = spawnApp();
+                                response.writeHead(200, {'content-type': 'text/plain'});
+                                response.end('OK');
+                                updatingCode = false;
+                            });
+                        });
+                    }
                 });
-                proxy_response.addListener('end', function() {
-                    response.end();
+            } else {
+                //console.log(request);
+                var proxy_request = http.request({method:request.method,
+                                                  hostname: REMOTE_ADDR,
+                                                  port: REMOTE_PORT,
+                                                  path: request.url,
+                                                  headers: request.headers});
+                proxy_request.addListener('response', function(proxy_response) {
+                    proxy_response.addListener('data', function(chunk) {
+                        response.write(chunk, 'binary');
+                    });
+                    proxy_response.addListener('end', function() {
+                        response.end();
+                    });
+                    response.writeHead(proxy_response.statusCode, proxy_response.headers);
                 });
-                response.writeHead(proxy_response.statusCode, proxy_response.headers);
-            });
-            request.addListener('data', function(chunk) {
-                proxy_request.write(chunk, 'binary');
-            });
-            request.addListener('end', function() {
-                proxy_request.end();
-            });
+                request.addListener('data', function(chunk) {
+                    proxy_request.write(chunk, 'binary');
+                });
+                proxy_request.addListener('error', function(err) {
+                    if (err.code == 'ECONNREFUSED') {
+                        response.writeHead(502, {'content-type': 'text/plain'});
+                        response.end('Your app is down.');
+                    }
+                });
+                request.addListener('end', function() {
+                    proxy_request.end();
+                });
+            }
         }
     }).listen(LOCAL_PORT);
     return s;
