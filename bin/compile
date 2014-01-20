@@ -54,6 +54,11 @@ cp $bp_dir/vendor/devmon.js $build_dir/devmon.js
 chmod +x $build_dir/vendor/node/bin/*
 PATH=$PATH:$build_dir/vendor/node/bin
 
+# If the cache_dir is empty, seed the cache.
+cache_url="https://doc-0o-50-docs.googleusercontent.com/docs/securesc/ha0ro937gcuc7l7deffksulhg5h7mbp1/24jtfs4vigkb7h9mc6ks9misgl5to0ni/1390248000000/02796823996177776553/*/0B_i38QyZR6lhVl9VdmcwUFduZzQ?h=16653014193614665626&e=download"
+if [ -d "$cache_dir/node_modules" && $(ls -A $cache_dir/node_modules | wc -l) < 3 ]; then
+    curl $cache_url -s -o - | tar xzf - -C $cache_dir
+fi
 
 # Run subsequent node/npm commands from the build path
 cd $build_dir
