@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
+var fs = require('fs');
 var child_process = require('child_process');
 var http = require('http');
-var fs   = require('fs');
+var formidable = require('formidable');
 
 var DEBUG = true;
 
@@ -48,13 +49,11 @@ var httpProxy = function (LOCAL_PORT, REMOTE_ADDR, REMOTE_PORT) {
         var ip = request.connection.remoteAddress;
         console.log(ip + ": " + request.method + " " + request.url);
         if (request.url.indexOf('__update_code__') != -1) {
-            var recvBuf = [];
-            request.addListener('data', function(chunk) {
-                recvBuf.push(chunk);
-            });
-            request.addListener('end', function() {
+            var form = new formidable.IncomingForm();
+
+            form.parse(request, function(err, fields, files) {
                 var codeTarBuf = new Buffer(recvBuf.join(''), 'binary');
-                // Note: it will write this relative to the current working directory (cwd)
+                // Note: it will write this relative to the current working directory which should be appdir
                 fs.writeFile('payload2.tar', codeTarBuf, function(err) {
                     if (err) throw err;
                     updateCode('payload2.tar', function(){
@@ -64,6 +63,8 @@ var httpProxy = function (LOCAL_PORT, REMOTE_ADDR, REMOTE_PORT) {
                             console.log('Spawning app.');
                             // app is a global
                             app = spawnApp();
+                            response.writeHead(200, {'content-type': 'text/plain'});
+                            response.end('OK');
                         });
                     });
                 });
@@ -113,4 +114,4 @@ process.chdir(cwd);
 console.log('Changed CWD to ' + cwd);
 // global
 app = spawnApp();
-var proxySock = tcpProxy(port, '127.0.0.1', proxyport);
+var proxySock = httpProxy(port, '127.0.0.1', proxyport);
