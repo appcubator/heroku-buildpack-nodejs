@@ -3,7 +3,7 @@
 var net = require('net');
 var child_process = require('child_process');
 var fs = require('fs');
-var DEBUG = false;
+var DEBUG = true;
 
 var updateCode = function (tarpath, callback) {
     child_process.exec('tar -xvf '+tarpath, function(err, stdout, stderr) {
