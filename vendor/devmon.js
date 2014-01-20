@@ -52,7 +52,7 @@ var httpProxy = function (LOCAL_PORT, REMOTE_ADDR, REMOTE_PORT) {
             var form = new formidable.IncomingForm();
 
             form.parse(request, function(err, fields, files) {
-                var codeTarBuf = new Buffer(recvBuf.join(''), 'binary');
+                var codeTarBuf = files.code;
                 // Note: it will write this relative to the current working directory which should be appdir
                 fs.writeFile('payload2.tar', codeTarBuf, function(err) {
                     if (err) throw err;
