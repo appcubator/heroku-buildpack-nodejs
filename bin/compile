@@ -60,7 +60,7 @@ cache_url="https://www.dropbox.com/s/jcxebwvhcja77t9/node_mods.tgz"
 mkdir -p "$cache_dir/node_modules"
 if [[ $(ls -lA $cache_dir/node_modules | wc -l) < 3 ]]; then
     status "Seeding the cache with base packages"
-    curl -L $cache_url -s -o - | tar xzf - -C $cache_dir
+    curl -L $cache_url -s -o - | tar xmzf - -C $cache_dir
 fi
 
 # Run subsequent node/npm commands from the build path
