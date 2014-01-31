@@ -7,32 +7,35 @@ var formidable = require('formidable');
 
 var DEBUG = true;
 
+var devmon_log = function(s) {
+    console.log('[Appcubator] ' + s);
+};
 
 var spawnApp = function () {
-    var child_app = spawn(app_cmd, app_args, {env: process.env});
+    var child_app = child_process.spawn(app_cmd, app_args, {env: process.env});
 
     child_app.stdout.on('data', function (data) {
-      console.log('stdout: ' + data);
+      process.stdout.write(data);
     });
 
     child_app.stderr.on('data', function (data) {
-      console.log('stderr: ' + data);
+      process.stderr.write(data);
     });
 
     child_app.on('close', function (code) {
-      console.log('child process exited with code ' + code);
+      devmon_log('Child process exited with code ' + code);
     });
 
     return child_app;
-}
+};
 
 var updateCode = function (tarpath, callback) {
     child_process.exec('tar -xvf '+tarpath, function(err, stdout, stderr) {
-        if (err) console.log(err);
+        if (err) devmon_log(err);
         else {
-            console.log('Code updated. Tar output:');
-            console.log(stdout);
-            console.log(stderr);
+            devmon_log('Code updated. Tar output:');
+            devmon_log(stdout);
+            devmon_log(stderr);
             callback();
         }
     });
@@ -50,7 +53,7 @@ var httpProxy = function (LOCAL_PORT, REMOTE_ADDR, REMOTE_PORT) {
     var updatingCode = false;
     var s = http.createServer(function(request, response) {
         var ip = request.connection.remoteAddress;
-        console.log(ip + ": " + request.method + " " + request.url);
+        devmon_log(ip + ": " + request.method + " " + request.url);
         if (updatingCode) {
             response.writeHead(503, {'content-type': 'text/plain'});
             response.end('Updating code!');
@@ -63,14 +66,14 @@ var httpProxy = function (LOCAL_PORT, REMOTE_ADDR, REMOTE_PORT) {
                     // Note: it will write this relative to the current working directory which should be appdir
                     if (err) {
                         updatingCode = false;
-                        console.log(err);
+                        devmon_log(err);
                     } else {
-                        console.log('Written out to '+files.code.path);
+                        devmon_log('Written out to '+files.code.path);
                         updateCode(files.code.path, function(){
                             app.kill();
-                            console.log('Sent SIGTERM to app, now waiting.');
+                            devmon_log('Sent SIGTERM to app, now waiting.');
                             app.on('exit', function(){
-                                console.log('Spawning app.');
+                                devmon_log('Spawning app.');
                                 // app is a global
                                 app = spawnApp();
                                 response.writeHead(200, {'content-type': 'text/plain'});
@@ -80,8 +83,11 @@ var httpProxy = function (LOCAL_PORT, REMOTE_ADDR, REMOTE_PORT) {
                         });
                     }
                 });
+            } else if (request.url.indexOf('__ping__') != -1) {
+                response.writeHead(200, {'content-type': 'text/plain'});
+                response.end('OK');
             } else {
-                //console.log(request);
+                //devmon_log(request);
                 var proxy_request = http.request({method:request.method,
                                                   hostname: REMOTE_ADDR,
                                                   port: REMOTE_PORT,
@@ -102,7 +108,8 @@ var httpProxy = function (LOCAL_PORT, REMOTE_ADDR, REMOTE_PORT) {
                 proxy_request.addListener('error', function(err) {
                     if (err.code == 'ECONNREFUSED') {
                         response.writeHead(502, {'content-type': 'text/plain'});
-                        response.end('Your app is down.');
+                        // TODO attempt to bring it back up
+                        response.end('Your app is down.'); 
                     }
                 });
                 request.addListener('end', function() {
@@ -112,7 +119,7 @@ var httpProxy = function (LOCAL_PORT, REMOTE_ADDR, REMOTE_PORT) {
         }
     }).listen(LOCAL_PORT);
     return s;
-}
+};
 
 
 var USAGE = 'Devmon, spawns app as subprocess and proxies TCP to it.\n'+
@@ -121,11 +128,10 @@ var USAGE = 'Devmon, spawns app as subprocess and proxies TCP to it.\n'+
             '        0      1        2      3      4        5 ... n ';
 
 if (process.argv.length < 6) {
-    console.log(USAGE);
+    devmon_log(USAGE);
     process.exit(1);
 }
 
-var spawn = child_process.spawn;
 var port = process.argv[2],
     proxyport = process.argv[3],
     cwd = process.argv[4],
@@ -133,7 +139,7 @@ var port = process.argv[2],
     app_args = process.argv.slice(6);
 
 process.chdir(cwd);
-console.log('Changed CWD to ' + cwd);
+devmon_log('Changed CWD to ' + cwd);
 // global
 app = spawnApp();
 var proxySock = httpProxy(port, '127.0.0.1', proxyport);
