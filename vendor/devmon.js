@@ -12,12 +12,15 @@ var DEBUG = true;
 var devmon_log = function(s) {
     console.log('[Appcubator] ' + s);
 };
+            String.prototype.endsWith = function(suffix) {
+                    return this.indexOf(suffix, this.length - suffix.length) !== -1;
+            };
 
 var spawnApp = function (command) {
     /* command should be an array of args */
-    forever.start(command, {watch:true});
+    var child = forever.start(command, {watch:true, watchDirectory:'.'});
 
-    forever.on('start', function () {
+    child.on('start', function () {
         devmon_log('App has started');
     }).on('exit', function () {
         devmon_log('App has quit');
@@ -28,8 +31,8 @@ var spawnApp = function (command) {
 
 var spawnNodeInspector = function() {
     /* note that this will only work if the app has node --debug. */
-    var child = forever.start([ 'node-inspector']);
-    forever.on('start', function () {
+    var child = forever.start(['node-inspector'], {});
+    child.on('start', function () {
         devmon_log('Node-inspector has started');
     }).on('exit', function () {
         devmon_log('Node-inspector has quit');
@@ -65,6 +68,12 @@ var httpProxy = function (LOCAL_PORT, REMOTE_ADDR, REMOTE_PORT) {
     var s = http.createServer(function(request, response) {
         var ip = request.connection.remoteAddress;
         devmon_log(ip + ": " + request.method + " " + request.url);
+
+        if (request.headers.referer && request.headers.referer.endsWith('/dev/node-inspector/')) {
+            if (request.url.indexOf('/dev/node-inspector') !== 0)
+            request.url = '/dev/node-inspector' + request.url;
+        }
+
         /* [ ROUTE ] update code */
         if (!updatingCode && request.url.indexOf('__update_code__') != -1) {
             var form = new formidable.IncomingForm();
@@ -84,14 +93,12 @@ var httpProxy = function (LOCAL_PORT, REMOTE_ADDR, REMOTE_PORT) {
         /* [ ROUTE ] node-inspector */
         } else if (request.url.indexOf('/dev/node-inspector/') != -1) {
             var newUrl;
-            String.prototype.endsWith = function(suffix) {
-                    return this.indexOf(suffix, this.length - suffix.length) !== -1;
-            };
             if (request.url.endsWith('/dev/node-inspector/')) {
-                newUrl = request.url.replace('/dev/node-inspector/', 'debug?port=5858'),
+                newUrl = request.url.replace('/dev/node-inspector/', '/debug?port=5858');
             } else {
-                newUrl = request.url.replace('/dev/node-inspector/', ''),
+                newUrl = request.url.replace('/dev/node-inspector/', '/');
             }
+            console.log(newUrl);
             var proxy_request = http.request({method:request.method,
                                               hostname: '127.0.0.1',
                                               port: 8080,
@@ -125,13 +132,12 @@ var httpProxy = function (LOCAL_PORT, REMOTE_ADDR, REMOTE_PORT) {
             response.end('OK');
         /* [ ROUTE ] proxy to app */
         } else {
-            //devmon_log(request);
-            var proxy_request = http.request({method:request.method,
+            var proxy_request2 = http.request({method:request.method,
                                               hostname: REMOTE_ADDR,
                                               port: REMOTE_PORT,
                                               path: request.url,
                                               headers: request.headers});
-            proxy_request.addListener('response', function(proxy_response) {
+            proxy_request2.addListener('response', function(proxy_response) {
                 proxy_response.addListener('data', function(chunk) {
                     response.write(chunk, 'binary');
                 });
@@ -141,9 +147,9 @@ var httpProxy = function (LOCAL_PORT, REMOTE_ADDR, REMOTE_PORT) {
                 response.writeHead(proxy_response.statusCode, proxy_response.headers);
             });
             request.addListener('data', function(chunk) {
-                proxy_request.write(chunk, 'binary');
+                proxy_request2.write(chunk, 'binary');
             });
-            proxy_request.addListener('error', function(err) {
+            proxy_request2.addListener('error', function(err) {
                 if (err.code == 'ECONNREFUSED') {
                     if (updatingCode) {
                         response.writeHead(503, {'content-type': 'text/plain'});
@@ -157,7 +163,7 @@ var httpProxy = function (LOCAL_PORT, REMOTE_ADDR, REMOTE_PORT) {
                 }
             });
             request.addListener('end', function() {
-                proxy_request.end();
+                proxy_request2.end();
             });
         }
     }).listen(LOCAL_PORT);
@@ -184,6 +190,7 @@ var port = process.argv[2],
 process.chdir(cwd);
 devmon_log('Changed CWD to ' + cwd);
 
+console.log([app_cmd].concat(app_args));
 spawnApp([app_cmd].concat(app_args));
 spawnNodeInspector();
 
