@@ -90,8 +90,9 @@ fi
   status "Installing dependencies"
   # Make npm output to STDOUT instead of its default STDERR
   npm install --userconfig $build_dir/.npmrc --production 2>&1 | indent
-  # Install this dependency of devmon.js (the proxy)
-  npm install formidable --userconfig $build_dir/.npmrc --production 2>&1 | indent
+  # Install dependencies of devmon.js (the proxy)
+  npm install formidable forever-monitor --userconfig $build_dir/.npmrc --production 2>&1 | indent
+  npm install -g node-inspector --userconfig $build_dir/.npmrc --production 2>&1 | indent
 )
 
 status "Caching node_modules directory for future builds"
