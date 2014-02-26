@@ -83,10 +83,19 @@ var httpProxy = function (LOCAL_PORT, REMOTE_ADDR, REMOTE_PORT) {
             });
         /* [ ROUTE ] node-inspector */
         } else if (request.url.indexOf('/dev/node-inspector/') != -1) {
+            var newUrl;
+            String.prototype.endsWith = function(suffix) {
+                    return this.indexOf(suffix, this.length - suffix.length) !== -1;
+            };
+            if (request.url.endsWith('/dev/node-inspector/')) {
+                newUrl = request.url.replace('/dev/node-inspector/', 'debug?port=5858'),
+            } else {
+                newUrl = request.url.replace('/dev/node-inspector/', ''),
+            }
             var proxy_request = http.request({method:request.method,
                                               hostname: '127.0.0.1',
                                               port: 8080,
-                                              path: request.url.replace('/dev/node-inspector/', ''),
+                                              path: newUrl,
                                               headers: request.headers});
             proxy_request.addListener('response', function(proxy_response) {
                 proxy_response.addListener('data', function(chunk) {
